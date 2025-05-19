@@ -32,4 +32,28 @@ yarn-error.*
 .env*.local
 
 # typescript
-*.tsbuildinfo
+*.tsbuildinf
+# Ignorar modelos grandes
+*.pt
+
+# Ignorar videos
+*.mp4
+*.mov
+*.avi
+
+# Ignorar carpetas de resultados de entrenamiento
+runs/
+
+# Archivos temporales
+*.log
+__pycache__/
+*.pyc
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Ignorar imágenes y etiquetas del dataset
+src/dataset/train/
+src/dataset/valid/
+src/vision/frames_rf/
