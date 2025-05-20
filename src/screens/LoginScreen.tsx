@@ -3,18 +3,18 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
   Dimensions,
-  ScrollView,
   StatusBar,
   Animated,
   Modal,
   Image,
   FlatList,
   Alert,
+  ScrollView,
+  Pressable,
 } from 'react-native';
-import { NavigationProp, RouteProp } from '@react-navigation/native';
+import { NavigationProp, RouteProp, useFocusEffect } from '@react-navigation/native';
 import io from 'socket.io-client';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -67,12 +67,12 @@ interface ParkingAppProps {
 }
 
 const TabButton = ({ title, active, onPress }: { title: string; active: boolean; onPress: () => void }) => (
-  <TouchableOpacity
+  <Pressable
     style={[styles.tabButton, active && styles.activeTab]}
     onPress={onPress}
   >
     <Text style={[styles.tabText, active && styles.activeTabText]}>{title}</Text>
-  </TouchableOpacity>
+  </Pressable>
 );
 
 export default function ParkingAppScreen({ navigation, route }: ParkingAppProps) {
@@ -89,6 +89,19 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const [reservaExitosa, setReservaExitosa] = useState(false);
 
+  // Nuevo: estados para modal de correo
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [emailError, setEmailError] = useState('');
+
+  useFocusEffect(
+    React.useCallback(() => {
+      AsyncStorage.getItem('reservaExitosa').then(value => {
+        setReservaExitosa(value === 'true');
+      });
+    }, [])
+  );
+
   useEffect(() => {
     if (searchText) {
       const results = plazasDisponibles.filter(plaza => 
@@ -100,12 +113,6 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
       setFilteredPlazas(plazasDisponibles);
     }
   }, [searchText]);
-
-  useEffect(() => {
-    AsyncStorage.getItem('reservaExitosa').then(value => {
-      setReservaExitosa(value === 'true');
-    });
-  }, []);
 
   const handleVerDetalle = (plaza) => {
     setSelectedPlaza(null);
@@ -123,8 +130,60 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
 
   const handleSaveProfile = () => {
     setShowProfileModal(false);
-    // Guardar perfil aquí si es necesario
   };
+
+  // -------- FUNCION PARA VERIFICAR CORREO RECIBO -------
+  const verificarCorreoRecibo = async () => {
+    setEmailError('');
+    if (!emailInput) {
+      setEmailError('Ingresa tu correo');
+      return;
+    }
+    try {
+      const response = await fetch(`http://192.168.1.71:5000/api/verificar-recibo?email=${encodeURIComponent(emailInput)}`);
+      const data = await response.json();
+      if (data.exists) {
+        setShowEmailModal(false);
+        setEmailInput('');
+        Alert.alert('Acceso concedido', '¡Correo correcto! Puedes ver tus mensajes.');
+        navigation.navigate('MessageScreen', { email: emailInput });
+      } else {
+        setEmailError('Correo incorrecto');
+      }
+    } catch (err) {
+      setEmailError('Error al verificar. Intenta de nuevo.');
+    }
+  };
+
+  // Modal para pedir correo
+const modalCorreo = (
+  <Modal visible={showEmailModal} transparent animationType="fade">
+    <View style={styles.modalOverlay}>
+      <View style={styles.emailModalContent}>
+        <Text style={styles.emailModalTitle}>Ingresa tu correo</Text>
+        <TextInput
+          style={styles.emailInput}
+          placeholder="ejemplo@correo.com"
+          placeholderTextColor="#8e9aaf"
+          value={emailInput}
+          onChangeText={setEmailInput}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
+        {emailError ? (
+          <Text style={styles.emailError}>{emailError}</Text>
+        ) : null}
+        <Pressable style={styles.emailModalButton} onPress={verificarCorreoRecibo}>
+          <Text style={styles.emailModalButtonText}>Verificar</Text>
+        </Pressable>
+        <Pressable style={styles.emailModalCancel} onPress={() => { setShowEmailModal(false); setEmailError(''); }}>
+          <Text style={styles.emailModalCancelText}>Cancelar</Text>
+        </Pressable>
+      </View>
+    </View>
+  </Modal>
+);
+
 
   const renderPlaza = ({ item }) => (
     <View style={styles.plazaCard}>
@@ -142,17 +201,17 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
         <Text style={styles.disponiblesText}>Disponible: {item.duracion}</Text>
         <Text style={styles.horarioText}>{item.horario}</Text>
       </View>
-      <TouchableOpacity
+      <Pressable
         style={styles.estrenoButton}
         onPress={handleReservar}
       >
         <Text style={styles.estrenoText}>Reservar</Text>
-      </TouchableOpacity>
+      </Pressable>
       <Text style={styles.plazaTitle}>{item.nombre}</Text>
       <Text style={styles.ciudadText}>{item.ciudad}</Text>
-      <TouchableOpacity onPress={() => handleVerDetalle(item)}>
+      <Pressable onPress={() => handleVerDetalle(item)}>
         <Text style={styles.verMasText}>Ver disponibilidad <Ionicons name="information-circle-outline" size={16} color="#4a90e2" /></Text>
-      </TouchableOpacity>
+      </Pressable>
     </View>
   );
 
@@ -161,9 +220,9 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
       <StatusBar backgroundColor="#0c1631" barStyle="light-content" />
       {/* Barra superior */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => alert('Notificaciones')}>
+        <Pressable style={styles.iconButton} onPress={() => alert('Notificaciones')}>
           <Ionicons name="notifications-outline" size={24} color="white" />
-        </TouchableOpacity>
+        </Pressable>
         <View style={styles.tabsContainer}>
           <TabButton 
             title="Estacionamientos" 
@@ -179,9 +238,9 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
             }}
           />
         </View>
-        <TouchableOpacity style={styles.iconButton} onPress={() => setShowProfileModal(true)}>
+        <Pressable style={styles.iconButton} onPress={() => setShowProfileModal(true)}>
           <Ionicons name="person-circle-outline" size={28} color="white" />
-        </TouchableOpacity>
+        </Pressable>
       </View>
       {/* Barra de búsqueda */}
       <View style={styles.searchBar}>
@@ -189,7 +248,7 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
           <Ionicons name="location" size={24} color="white" />
           <Text style={styles.locationText}>Estacionamientos</Text>
         </View>
-        <TouchableOpacity 
+        <Pressable 
           style={styles.searchButton}
           onPress={() => setShowSearchModal(true)}
         >
@@ -197,69 +256,78 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
             {selectedPlaza ? selectedPlaza.nombre : "Buscar plaza..."}
           </Text>
           {selectedPlaza && (
-            <TouchableOpacity 
+            <Pressable 
               style={styles.closeSearchIcon}
               onPress={() => setSelectedPlaza(null)}
             >
               <Ionicons name="close" size={20} color="white" />
-            </TouchableOpacity>
+            </Pressable>
           )}
-        </TouchableOpacity>
+        </Pressable>
       </View>
-      {/* Contenido principal */}
-      <ScrollView style={styles.content}>
-        <FlatList
-          data={selectedPlaza ? [selectedPlaza] : filteredPlazas}
-          renderItem={renderPlaza}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.plazasList}
-          numColumns={2}
-        />
-      </ScrollView>
+      {/* Contenido principal (solo FlatList) */}
+      <FlatList
+        data={selectedPlaza ? [selectedPlaza] : filteredPlazas}
+        renderItem={renderPlaza}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.plazasList}
+        numColumns={2}
+      />
       {/* Barra inferior de navegación */}
       <View style={styles.navbar}>
-        <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('estacionamientos')}>
-          <Ionicons name="car" size={24} color={activeTab === 'estacionamientos' ? "#4a90e2" : "#8e9aaf"} />
-          <Text style={[styles.navText, activeTab === 'estacionamientos' && styles.activeNavText]}>Plazas</Text>
-        </TouchableOpacity>
-        {/* Mensajes: Candado y color rojo si no ha reservado */}
-        <TouchableOpacity
+        <Pressable 
           style={styles.navItem}
-          onPress={() => {
-            if (reservaExitosa) {
-              navigation.navigate('MessageScreen');
-            } else {
-              Alert.alert('Función bloqueada', 'Debes reservar un cajón para enviar mensajes.');
+          onPress={() => setActiveTab('estacionamientos')}
+        >
+          <Ionicons 
+            name="car" 
+            size={24} 
+            color={activeTab === 'estacionamientos' ? "#4a90e2" : "#8e9aaf"} 
+          />
+          <Text style={[styles.navText, activeTab === 'estacionamientos' && styles.activeNavText]}>
+            Plazas
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[
+            styles.navItem,
+            !reservaExitosa && {
+              backgroundColor: '#390e0e',
+              borderRadius: 8,
             }
-          }}
-          disabled={!reservaExitosa}
+          ]}
+          onPress={() => setShowEmailModal(true)}
         >
           <Ionicons
             name={reservaExitosa ? "mail-outline" : "lock-closed-outline"}
             size={24}
             color={reservaExitosa ? "#8e9aaf" : "#d63031"}
           />
-          <Text style={[styles.navText, !reservaExitosa && { color: '#d63031' }]}>
+          <Text style={[
+            styles.navText,
+            !reservaExitosa && { color: '#d63031', fontWeight: 'bold' }
+          ]}>
             Mensajes
           </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+        </Pressable>
+        <Pressable
           style={styles.navItem}
           onPress={() => navigation.navigate('ClubScreen')}
         >
           <Ionicons name="card-outline" size={24} color="#8e9aaf" />
           <Text style={styles.navText}>Club</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => alert('Mis reservas')}>
+        </Pressable>
+        <Pressable style={styles.navItem} onPress={() => alert('Mis reservas')}>
           <Ionicons name="time-outline" size={24} color="#8e9aaf" />
           <Text style={styles.navText}>Mis reservas</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => alert('Más')}>
+        </Pressable>
+        <Pressable style={styles.navItem} onPress={() => alert('Más')}>
           <Ionicons name="ellipsis-horizontal" size={24} color="#8e9aaf" />
           <Text style={styles.navText}>Más</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
-      {/* Modal de búsqueda */}
+      {/* Modales */}
+      {modalCorreo}
       <Modal visible={showSearchModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -275,7 +343,7 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
               data={filteredPlazas}
               keyExtractor={item => item.id}
               renderItem={({ item }) => (
-                <TouchableOpacity
+                <Pressable
                   style={styles.searchResultItem}
                   onPress={() => {
                     setSelectedPlaza(item);
@@ -284,18 +352,18 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
                 >
                   <Text style={styles.searchResultName}>{item.nombre}</Text>
                   <Text style={styles.searchResultCity}>{item.ciudad}</Text>
-                </TouchableOpacity>
+                </Pressable>
               )}
               ListEmptyComponent={() => (
                 <Text style={styles.noResultsText}>No se encontraron plazas</Text>
               )}
             />
-            <TouchableOpacity 
+            <Pressable 
               style={styles.closeModalButton}
               onPress={() => setShowSearchModal(false)}
             >
               <Text style={styles.closeModalText}>Cerrar</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -335,18 +403,18 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
                 onChangeText={setColor}
               />
             </View>
-            <TouchableOpacity 
+            <Pressable 
               style={styles.saveButton}
               onPress={handleSaveProfile}
             >
               <Text style={styles.saveButtonText}>Guardar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
+            </Pressable>
+            <Pressable 
               style={styles.closeModalButton}
               onPress={() => setShowProfileModal(false)}
             >
               <Text style={styles.closeModalText}>Cancelar</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -364,6 +432,63 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     backgroundColor: '#0c1631',
   },
+  emailModalContent: {
+  backgroundColor: '#162244',
+  width: '90%',
+  borderRadius: 10,
+  padding: 20,
+  maxHeight: '80%',
+  alignItems: 'center',
+},
+emailModalTitle: {
+  fontSize: 20,
+  fontWeight: 'bold',
+  color: 'white',
+  marginBottom: 20,
+  textAlign: 'center',
+},
+emailInput: {
+  width: '100%',
+  borderWidth: 1,
+  borderColor: '#2d3d64',
+  borderRadius: 8,
+  padding: 12,
+  fontSize: 16,
+  color: 'white',
+  backgroundColor: '#233364',
+  marginBottom: 15,
+},
+emailError: {
+  color: 'red',
+  marginBottom: 10,
+  alignSelf: 'flex-start',
+},
+emailModalButton: {
+  width: '100%',
+  backgroundColor: '#3366ff',
+  paddingVertical: 12,
+  borderRadius: 5,
+  alignItems: 'center',
+  marginBottom: 10,
+},
+emailModalButtonText: {
+  color: 'white',
+  fontWeight: 'bold',
+  fontSize: 16,
+},
+emailModalCancel: {
+  width: '100%',
+  backgroundColor: '#2d3d64',
+  paddingVertical: 10,
+  borderRadius: 5,
+  alignItems: 'center',
+},
+emailModalCancelText: {
+  color: 'white',
+  fontWeight: 'bold',
+  fontSize: 16,
+},
+
   iconButton: { padding: 8 },
   tabsContainer: { flexDirection: 'row', flex: 1, justifyContent: 'center' },
   tabButton: { paddingVertical: 12, paddingHorizontal: 10 },

@@ -7,8 +7,6 @@ import PremiumScreen from '../screens/PremiumScreen';
 import ContactoScreen from '../screens/ContactoScreen';
 import MessageScreen from '../screens/MessageScreen';
 import InfoCarScreen from '../screens/InfoCarScreen';
-import InvitadosScreen from '../screens/InvitadosScreen';
-import RegistroScreen from '../screens/RegistroScreen'; // Registro de usuarios
 import ClubScreen from '../screens/ClubScreen'; // Pantalla de ventajas del Club
 import { enableScreens } from 'react-native-screens';
 
@@ -54,16 +52,6 @@ export default function MainNavigator() {
           name="MessageScreen" 
           component={MessageScreen} 
           options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="InvitadosScreen" 
-          component={InvitadosScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen
-          name="Registro"
-          component={RegistroScreen}
-          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="ClubScreen"
