@@ -49,6 +49,7 @@
     "react-native-picker-select": "^9.3.1",
     "react-native-share": "^12.0.11",
     "react-native-square-in-app-payments": "^1.7.6",
+    "react-native-svg": "^15.12.0",
     "react-native-usb-serialport": "^3.0.0",
     "react-native-web": "^0.20.0",
     "react-native-webview": "^13.13.5",
@@ -78,5 +79,9 @@
     "react-native-screens": "~4.10.0",
     "typescript": "~5.8.3"
   },
-  "private": true
+  "private": true,
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
 }

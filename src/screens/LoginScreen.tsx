@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,53 +11,51 @@ import {
   Image,
   FlatList,
   Alert,
-  ScrollView,
-  Pressable,
-} from 'react-native';
-import { NavigationProp, RouteProp, useFocusEffect } from '@react-navigation/native';
-import io from 'socket.io-client';
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+} from "react-native";
+import { NavigationProp, RouteProp } from "@react-navigation/native";
+import io from "socket.io-client";
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const { width } = Dimensions.get('window');
-const socket = io('http://192.168.1.71:5000');
+const { width } = Dimensions.get("window");
+const socket = io("http://192.168.1.71:5000");
 
 const plazasDisponibles = [
-  { 
-    id: '1', 
-    nombre: 'Plaza Rio', 
-    ciudad: 'Tijuana', 
-    disponibles: 45, 
-    duracion: '3 hrs', 
-    imagen: require('../../assets/RIO.png'),
-    horario: '10:00 - 22:00' 
+  {
+    id: "1",
+    nombre: "Plaza Rio",
+    ciudad: "Tijuana",
+    disponibles: 45,
+    duracion: "3 hrs",
+    imagen: require("../../assets/RIO.png"),
+    horario: "10:00 - 22:00",
   },
-  { 
-    id: '2', 
-    nombre: 'Plaza Peninsula', 
-    ciudad: 'Tijuana', 
-    disponibles: 32, 
-    duracion: '2 hrs', 
-    imagen: require('../../assets/penin.png'),
-    horario: '09:00 - 21:00' 
+  {
+    id: "2",
+    nombre: "Plaza Peninsula",
+    ciudad: "Tijuana",
+    disponibles: 32,
+    duracion: "2 hrs",
+    imagen: require("../../assets/penin.png"),
+    horario: "09:00 - 21:00",
   },
-  { 
-    id: '3', 
-    nombre: 'Plaza Hipódromo', 
-    ciudad: 'Tijuana', 
-    disponibles: 18, 
-    duracion: '4 hrs', 
-    imagen: require('../../assets/hipodromo.png'),
-    horario: '10:00 - 23:00' 
+  {
+    id: "3",
+    nombre: "Plaza Hipódromo",
+    ciudad: "Tijuana",
+    disponibles: 18,
+    duracion: "4 hrs",
+    imagen: require("../../assets/hipodromo.png"),
+    horario: "10:00 - 23:00",
   },
-  { 
-    id: '4', 
-    nombre: 'Landmark', 
-    ciudad: 'Tijuana', 
-    disponibles: 27, 
-    duracion: '3 hrs', 
-    imagen: require('../../assets/landmark.png'),
-    horario: '11:00 - 22:00' 
+  {
+    id: "4",
+    nombre: "Landmark",
+    ciudad: "Tijuana",
+    disponibles: 27,
+    duracion: "3 hrs",
+    imagen: require("../../assets/landmark.png"),
+    horario: "11:00 - 22:00",
   },
 ];
 
@@ -66,26 +64,39 @@ interface ParkingAppProps {
   route: RouteProp<any>;
 }
 
-const TabButton = ({ title, active, onPress }: { title: string; active: boolean; onPress: () => void }) => (
-  <Pressable
+const TabButton = ({
+  title,
+  active,
+  onPress,
+}: {
+  title: string;
+  active: boolean;
+  onPress: () => void;
+}) => (
+  <TouchableOpacity
     style={[styles.tabButton, active && styles.activeTab]}
     onPress={onPress}
   >
-    <Text style={[styles.tabText, active && styles.activeTabText]}>{title}</Text>
-  </Pressable>
+    <Text style={[styles.tabText, active && styles.activeTabText]}>
+      {title}
+    </Text>
+  </TouchableOpacity>
 );
 
-export default function ParkingAppScreen({ navigation, route }: ParkingAppProps) {
-  const [activeTab, setActiveTab] = useState('estacionamientos');
-  const [searchText, setSearchText] = useState('');
+export default function ParkingAppScreen({
+  navigation,
+  route,
+}: ParkingAppProps) {
+  const [activeTab, setActiveTab] = useState("estacionamientos");
+  const [searchText, setSearchText] = useState("");
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [selectedPlaza, setSelectedPlaza] = useState(null);
   const [filteredPlazas, setFilteredPlazas] = useState(plazasDisponibles);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [usuario, setUsuario] = useState('');
-  const [placas, setPlacas] = useState('');
-  const [modelo, setModelo] = useState('');
-  const [color, setColor] = useState('');
+  const [usuario, setUsuario] = useState("");
+  const [placas, setPlacas] = useState("");
+  const [modelo, setModelo] = useState("");
+  const [color, setColor] = useState("");
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const [reservaExitosa, setReservaExitosa] = useState(false);
 
@@ -104,9 +115,10 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
 
   useEffect(() => {
     if (searchText) {
-      const results = plazasDisponibles.filter(plaza => 
-        plaza.nombre.toLowerCase().includes(searchText.toLowerCase()) ||
-        plaza.ciudad.toLowerCase().includes(searchText.toLowerCase())
+      const results = plazasDisponibles.filter(
+        (plaza) =>
+          plaza.nombre.toLowerCase().includes(searchText.toLowerCase()) ||
+          plaza.ciudad.toLowerCase().includes(searchText.toLowerCase())
       );
       setFilteredPlazas(results);
     } else {
@@ -114,18 +126,32 @@ export default function ParkingAppScreen({ navigation, route }: ParkingAppProps)
     }
   }, [searchText]);
 
+  useEffect(() => {
+    AsyncStorage.getItem("reservaExitosa").then((value) => {
+      setReservaExitosa(value === "true");
+    });
+  }, []);
+
   const handleVerDetalle = (plaza) => {
     setSelectedPlaza(null);
     Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
     ]).start(() => {
-        navigation.navigate('MapaScreen', { plaza });
+      navigation.navigate("MapaScreen", { plaza });
     });
   };
 
   const handleReservar = () => {
-    navigation.navigate('InfoCarScreen', { availableSpots: 6 });
+    navigation.navigate("InfoCarScreen", { availableSpots: 6 });
   };
 
   const handleSaveProfile = () => {
@@ -203,15 +229,22 @@ const modalCorreo = (
       </View>
       <Pressable
         style={styles.estrenoButton}
-        onPress={handleReservar}
+        onPress={() => handleVerDetalle(item)}
       >
-        <Text style={styles.estrenoText}>Reservar</Text>
-      </Pressable>
+        <Text style={styles.estrenoText}>Ver Disponibilidad</Text>
+      </TouchableOpacity>
       <Text style={styles.plazaTitle}>{item.nombre}</Text>
       <Text style={styles.ciudadText}>{item.ciudad}</Text>
-      <Pressable onPress={() => handleVerDetalle(item)}>
-        <Text style={styles.verMasText}>Ver disponibilidad <Ionicons name="information-circle-outline" size={16} color="#4a90e2" /></Text>
-      </Pressable>
+      <TouchableOpacity onPress={handleReservar}>
+        <Text style={styles.verMasText}>
+          Reservar{" "}
+          <Ionicons
+            name="information-circle-outline"
+            size={16}
+            color="#4a90e2"
+          />
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -220,25 +253,31 @@ const modalCorreo = (
       <StatusBar backgroundColor="#0c1631" barStyle="light-content" />
       {/* Barra superior */}
       <View style={styles.header}>
-        <Pressable style={styles.iconButton} onPress={() => alert('Notificaciones')}>
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => alert("Notificaciones")}
+        >
           <Ionicons name="notifications-outline" size={24} color="white" />
         </Pressable>
         <View style={styles.tabsContainer}>
-          <TabButton 
-            title="Estacionamientos" 
-            active={activeTab === 'estacionamientos'} 
-            onPress={() => setActiveTab('estacionamientos')} 
+          <TabButton
+            title="Estacionamientos"
+            active={activeTab === "estacionamientos"}
+            onPress={() => setActiveTab("estacionamientos")}
           />
-          <TabButton 
+          <TabButton
             title="Reservar Cajones"
-            active={activeTab === 'reservar'}
+            active={activeTab === "reservar"}
             onPress={() => {
-              setActiveTab('reservar');
-              navigation.navigate('InfoCarScreen', { availableSpots: 6 });
+              setActiveTab("reservar");
+              navigation.navigate("InfoCarScreen", { availableSpots: 6 });
             }}
           />
         </View>
-        <Pressable style={styles.iconButton} onPress={() => setShowProfileModal(true)}>
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => setShowProfileModal(true)}
+        >
           <Ionicons name="person-circle-outline" size={28} color="white" />
         </Pressable>
       </View>
@@ -248,7 +287,7 @@ const modalCorreo = (
           <Ionicons name="location" size={24} color="white" />
           <Text style={styles.locationText}>Estacionamientos</Text>
         </View>
-        <Pressable 
+        <TouchableOpacity
           style={styles.searchButton}
           onPress={() => setShowSearchModal(true)}
         >
@@ -256,7 +295,7 @@ const modalCorreo = (
             {selectedPlaza ? selectedPlaza.nombre : "Buscar plaza..."}
           </Text>
           {selectedPlaza && (
-            <Pressable 
+            <TouchableOpacity
               style={styles.closeSearchIcon}
               onPress={() => setSelectedPlaza(null)}
             >
@@ -265,63 +304,77 @@ const modalCorreo = (
           )}
         </Pressable>
       </View>
-      {/* Contenido principal (solo FlatList) */}
+      {/* Contenido principal */}
+
       <FlatList
         data={selectedPlaza ? [selectedPlaza] : filteredPlazas}
         renderItem={renderPlaza}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.plazasList}
         numColumns={2}
       />
+
       {/* Barra inferior de navegación */}
       <View style={styles.navbar}>
-        <Pressable 
+        <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setActiveTab('estacionamientos')}
+          onPress={() => setActiveTab("estacionamientos")}
         >
-          <Ionicons 
-            name="car" 
-            size={24} 
-            color={activeTab === 'estacionamientos' ? "#4a90e2" : "#8e9aaf"} 
+          <Ionicons
+            name="car"
+            size={24}
+            color={activeTab === "estacionamientos" ? "#4a90e2" : "#8e9aaf"}
           />
-          <Text style={[styles.navText, activeTab === 'estacionamientos' && styles.activeNavText]}>
+          <Text
+            style={[
+              styles.navText,
+              activeTab === "estacionamientos" && styles.activeNavText,
+            ]}
+          >
             Plazas
           </Text>
-        </Pressable>
-        <Pressable
-          style={[
-            styles.navItem,
-            !reservaExitosa && {
-              backgroundColor: '#390e0e',
-              borderRadius: 8,
+        </TouchableOpacity>
+        {/* Mensajes: Candado y color rojo si no ha reservado */}
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => {
+            if (reservaExitosa) {
+              navigation.navigate("MessageScreen");
+            } else {
+              Alert.alert(
+                "Función bloqueada",
+                "Debes reservar un cajón para enviar mensajes."
+              );
             }
-          ]}
-          onPress={() => setShowEmailModal(true)}
+          }}
+          disabled={!reservaExitosa}
         >
           <Ionicons
             name={reservaExitosa ? "mail-outline" : "lock-closed-outline"}
             size={24}
             color={reservaExitosa ? "#8e9aaf" : "#d63031"}
           />
-          <Text style={[
-            styles.navText,
-            !reservaExitosa && { color: '#d63031', fontWeight: 'bold' }
-          ]}>
+          <Text
+            style={[styles.navText, !reservaExitosa && { color: "#d63031" }]}
+          >
             Mensajes
           </Text>
         </Pressable>
         <Pressable
           style={styles.navItem}
-          onPress={() => navigation.navigate('ClubScreen')}
+          onPress={() => navigation.navigate("ClubScreen")}
         >
           <Ionicons name="card-outline" size={24} color="#8e9aaf" />
           <Text style={styles.navText}>Club</Text>
-        </Pressable>
-        <Pressable style={styles.navItem} onPress={() => alert('Mis reservas')}>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => alert("Mis reservas")}
+        >
           <Ionicons name="time-outline" size={24} color="#8e9aaf" />
           <Text style={styles.navText}>Mis reservas</Text>
-        </Pressable>
-        <Pressable style={styles.navItem} onPress={() => alert('Más')}>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => alert("Más")}>
           <Ionicons name="ellipsis-horizontal" size={24} color="#8e9aaf" />
           <Text style={styles.navText}>Más</Text>
         </Pressable>
@@ -341,7 +394,7 @@ const modalCorreo = (
             />
             <FlatList
               data={filteredPlazas}
-              keyExtractor={item => item.id}
+              keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <Pressable
                   style={styles.searchResultItem}
@@ -355,10 +408,12 @@ const modalCorreo = (
                 </Pressable>
               )}
               ListEmptyComponent={() => (
-                <Text style={styles.noResultsText}>No se encontraron plazas</Text>
+                <Text style={styles.noResultsText}>
+                  No se encontraron plazas
+                </Text>
               )}
             />
-            <Pressable 
+            <TouchableOpacity
               style={styles.closeModalButton}
               onPress={() => setShowSearchModal(false)}
             >
@@ -403,13 +458,13 @@ const modalCorreo = (
                 onChangeText={setColor}
               />
             </View>
-            <Pressable 
+            <TouchableOpacity
               style={styles.saveButton}
               onPress={handleSaveProfile}
             >
               <Text style={styles.saveButtonText}>Guardar</Text>
-            </Pressable>
-            <Pressable 
+            </TouchableOpacity>
+            <TouchableOpacity
               style={styles.closeModalButton}
               onPress={() => setShowProfileModal(false)}
             >
@@ -423,150 +478,192 @@ const modalCorreo = (
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c1631' },
+  container: { flex: 1, backgroundColor: "#0c1631" },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingTop: 50,
     paddingHorizontal: 15,
-    backgroundColor: '#0c1631',
+    backgroundColor: "#0c1631",
   },
-  emailModalContent: {
-  backgroundColor: '#162244',
-  width: '90%',
-  borderRadius: 10,
-  padding: 20,
-  maxHeight: '80%',
-  alignItems: 'center',
-},
-emailModalTitle: {
-  fontSize: 20,
-  fontWeight: 'bold',
-  color: 'white',
-  marginBottom: 20,
-  textAlign: 'center',
-},
-emailInput: {
-  width: '100%',
-  borderWidth: 1,
-  borderColor: '#2d3d64',
-  borderRadius: 8,
-  padding: 12,
-  fontSize: 16,
-  color: 'white',
-  backgroundColor: '#233364',
-  marginBottom: 15,
-},
-emailError: {
-  color: 'red',
-  marginBottom: 10,
-  alignSelf: 'flex-start',
-},
-emailModalButton: {
-  width: '100%',
-  backgroundColor: '#3366ff',
-  paddingVertical: 12,
-  borderRadius: 5,
-  alignItems: 'center',
-  marginBottom: 10,
-},
-emailModalButtonText: {
-  color: 'white',
-  fontWeight: 'bold',
-  fontSize: 16,
-},
-emailModalCancel: {
-  width: '100%',
-  backgroundColor: '#2d3d64',
-  paddingVertical: 10,
-  borderRadius: 5,
-  alignItems: 'center',
-},
-emailModalCancelText: {
-  color: 'white',
-  fontWeight: 'bold',
-  fontSize: 16,
-},
-
   iconButton: { padding: 8 },
-  tabsContainer: { flexDirection: 'row', flex: 1, justifyContent: 'center' },
+  tabsContainer: { flexDirection: "row", flex: 1, justifyContent: "center" },
   tabButton: { paddingVertical: 12, paddingHorizontal: 10 },
-  activeTab: { borderBottomWidth: 3, borderBottomColor: '#2e86de' },
-  tabText: { color: '#8e9aaf', fontSize: 16, fontWeight: 'bold' },
-  activeTabText: { color: 'white' },
-  searchBar: { flexDirection: 'row', paddingHorizontal: 10, paddingVertical: 12, backgroundColor: '#162244' },
+  activeTab: { borderBottomWidth: 3, borderBottomColor: "#2e86de" },
+  tabText: { color: "#8e9aaf", fontSize: 16, fontWeight: "bold" },
+  activeTabText: { color: "white" },
+  searchBar: {
+    flexDirection: "row",
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    backgroundColor: "#162244",
+  },
   locationButton: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#3366ff',
-    paddingVertical: 12, paddingHorizontal: 15, borderRadius: 25, marginRight: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#3366ff",
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderRadius: 25,
+    marginRight: 10,
   },
-  locationText: { color: 'white', fontWeight: 'bold', marginLeft: 5 },
+  locationText: { color: "white", fontWeight: "bold", marginLeft: 5 },
   searchButton: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#2d3d64',
-    borderRadius: 25, paddingHorizontal: 15, paddingVertical: 10, justifyContent: 'space-between',
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#2d3d64",
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    justifyContent: "space-between",
   },
-  searchText: { color: 'white', flex: 1 },
+  searchText: { color: "white", flex: 1 },
   closeSearchIcon: { padding: 5 },
-  content: { flex: 1, backgroundColor: '#0c1631' },
+  content: { flex: 1, backgroundColor: "#0c1631" },
   plazasList: { padding: 10 },
   plazaCard: {
     width: width / 2 - 18,
     marginHorizontal: 8,
     marginBottom: 20,
-    backgroundColor: '#0c1631',
+    backgroundColor: "#0c1631",
   },
   plazaImageContainer: {
-    position: 'relative',
+    position: "relative",
     borderRadius: 10,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: 5,
-    backgroundColor: '#2c3e50',
+    backgroundColor: "#2c3e50",
     elevation: 3,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
-  infoContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 6 },
-  disponiblesText: { color: '#42b883', fontSize: 14, fontWeight: 'bold' },
-  horarioText: { color: '#e1b12c', fontSize: 12, fontWeight: '500' },
+  infoContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginVertical: 6,
+  },
+  disponiblesText: { color: "#42b883", fontSize: 14, fontWeight: "bold" },
+  horarioText: { color: "#e1b12c", fontSize: 12, fontWeight: "500" },
   plazaImage: {
-    width: '100%',
+    width: "100%",
     height: 200,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#2c3e50',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#2c3e50",
   },
   labelContainer: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
     left: 0,
-    backgroundColor: '#42b883',
+    backgroundColor: "#42b883",
     paddingVertical: 5,
     paddingHorizontal: 10,
     borderTopRightRadius: 10,
   },
-  labelText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
-  minutosText: { color: 'white', fontSize: 16, fontWeight: 'bold', marginVertical: 5 },
-  estrenoButton: { backgroundColor: '#3366ff', paddingVertical: 8, borderRadius: 20, alignItems: 'center', marginBottom: 8 },
-  estrenoText: { color: 'white', fontWeight: 'bold' },
-  plazaTitle: { color: 'white', fontSize: 16, fontWeight: 'bold', marginTop: 5 },
-  ciudadText: { color: '#8e9aaf', fontSize: 14, marginTop: 2 },
-  verMasText: { color: '#4a90e2', fontSize: 14, marginTop: 8 },
-  navbar: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#162244', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#253253' },
-  navItem: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
-  navText: { color: '#8e9aaf', fontSize: 12, marginTop: 4 },
-  activeNavText: { color: '#4a90e2' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: 'white', width: '90%', borderRadius: 10, padding: 20, maxHeight: '80%' },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
-  searchInput: { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, padding: 10, marginBottom: 15 },
-  searchResultItem: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  searchResultName: { fontSize: 16, fontWeight: 'bold' },
-  searchResultCity: { fontSize: 14, color: '#666' },
-  noResultsText: { textAlign: 'center', marginVertical: 20, color: '#666' },
-  closeModalButton: { backgroundColor: '#3366ff', paddingVertical: 12, borderRadius: 5, alignItems: 'center', marginTop: 15 },
-  closeModalText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  labelText: { color: "white", fontWeight: "bold", fontSize: 16 },
+  minutosText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginVertical: 5,
+  },
+  estrenoButton: {
+    backgroundColor: "#3366ff",
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  estrenoText: { color: "white", fontWeight: "bold" },
+  plazaTitle: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginTop: 5,
+  },
+  ciudadText: { color: "#8e9aaf", fontSize: 14, marginTop: 2 },
+  verMasText: { color: "#4a90e2", fontSize: 14, marginTop: 8 },
+  navbar: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    backgroundColor: "#162244",
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#253253",
+  },
+  navItem: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  navText: { color: "#8e9aaf", fontSize: 12, marginTop: 4 },
+  activeNavText: { color: "#4a90e2" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "white",
+    width: "90%",
+    borderRadius: 10,
+    padding: 20,
+    maxHeight: "80%",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 15,
+  },
+  searchResultItem: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  searchResultName: { fontSize: 16, fontWeight: "bold" },
+  searchResultCity: { fontSize: 14, color: "#666" },
+  noResultsText: { textAlign: "center", marginVertical: 20, color: "#666" },
+  closeModalButton: {
+    backgroundColor: "#3366ff",
+    paddingVertical: 12,
+    borderRadius: 5,
+    alignItems: "center",
+    marginTop: 15,
+  },
+  closeModalText: { color: "white", fontWeight: "bold", fontSize: 16 },
   profileForm: { marginBottom: 15 },
-  inputLabel: { fontSize: 14, fontWeight: 'bold', marginBottom: 5, color: '#333' },
-  profileInput: { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, padding: 10, marginBottom: 15 },
-  saveButton: { backgroundColor: '#42b883', paddingVertical: 12, borderRadius: 5, alignItems: 'center' },
-  saveButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 5,
+    color: "#333",
+  },
+  profileInput: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 15,
+  },
+  saveButton: {
+    backgroundColor: "#42b883",
+    paddingVertical: 12,
+    borderRadius: 5,
+    alignItems: "center",
+  },
+  saveButtonText: { color: "white", fontWeight: "bold", fontSize: 16 },
 });

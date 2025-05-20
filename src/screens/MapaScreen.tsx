@@ -1,48 +1,59 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Image,
-  FlatList,
   TouchableOpacity,
   StatusBar,
   Alert,
   Dimensions,
-} from 'react-native';
+  ScrollView,
+} from "react-native";
+import io from "socket.io-client";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
+const TOTAL_CAJONES = 72;
+const CAJONES_POR_FILA = 12;
+const socket = io("http://192.168.1.87:5050"); // Cambia la IP si es necesario
 
 export default function MapaScreen({ route, navigation }) {
   const { plaza } = route.params;
 
-  // --- Generar lugares aleatorios por cada plaza ---
-  // Memo para no cambiar cada render
-  const [totalCajones] = useState(24); // Cambia este valor por plaza si quieres
-  const cajonesOcupados = useMemo(() => {
-    // Genera de 5 a 10 ocupados randoms, diferentes cada vez que entras
-    const numOcupados = Math.floor(Math.random() * 6) + 5;
-    const ocupados = new Set();
-    while (ocupados.size < numOcupados) {
-      ocupados.add(Math.floor(Math.random() * totalCajones) + 1);
-    }
-    return ocupados;
-  }, [plaza.id]);
-  const cajones = Array.from({ length: totalCajones }, (_, i) => ({
-    numero: i + 1,
-    ocupado: cajonesOcupados.has(i + 1),
-  }));
+  const [cajones, setCajones] = useState(
+    Array.from({ length: TOTAL_CAJONES }, (_, i) => ({
+      id: `${i + 1}`,
+      ocupado: false,
+      ocultar: i + 1 === 72, // Oculta el cajón 72 visualmente
+    }))
+  );
 
-  // Estado para saber cuál está seleccionado
   const [selectedCajon, setSelectedCajon] = useState(null);
 
-  // Reservar el cajón seleccionado (lleva a InfoCarScreen)
+  useEffect(() => {
+    socket.on("connect", () => console.log("🟢 Conectado a WebSocket"));
+
+    socket.on("message", (data) => {
+      const updates = JSON.parse(data); // [{ id: "1", status: "occupied" }]
+      setCajones((prev) =>
+        prev.map((cajon) => {
+          const update = updates.find((u) => u.id === cajon.id);
+          return update
+            ? { ...cajon, ocupado: update.status === "occupied" }
+            : cajon;
+        })
+      );
+    });
+
+    return () => socket.disconnect();
+  }, []);
+
   const handleReservar = () => {
     if (!selectedCajon) {
-      Alert.alert('Selecciona un cajón libre para reservar');
+      Alert.alert("Selecciona un cajón libre para reservar");
       return;
     }
-    navigation.navigate('InfoCarScreen', {
+    navigation.navigate("InfoCarScreen", {
       availableSpots: plaza.disponibles,
       plazaSeleccionada: plaza.nombre,
       cajonSeleccionado: selectedCajon,
@@ -52,7 +63,7 @@ export default function MapaScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#0c1631" barStyle="light-content" />
-      {/* Imagen grande y sombreada */}
+
       <View style={styles.imagenWrap}>
         <Image
           source={plaza.imagen}
@@ -64,32 +75,61 @@ export default function MapaScreen({ route, navigation }) {
         <Text style={styles.horario}>{plaza.horario}</Text>
       </View>
 
-      {/* Grid visual tipo estacionamiento */}
       <Text style={styles.subtitulo}>Selecciona tu cajón</Text>
-      <FlatList
-        data={cajones}
-        numColumns={6}
-        keyExtractor={item => item.numero.toString()}
-        contentContainerStyle={styles.grid}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            disabled={item.ocupado}
-            style={[
-              styles.cajon,
-              item.ocupado && styles.cajonOcupado,
-              selectedCajon === item.numero && styles.cajonSeleccionado,
-            ]}
-            onPress={() => setSelectedCajon(item.numero)}
-          >
-            <Text style={styles.cajonNum}>{item.numero}</Text>
-            <Text style={styles.cajonIcon}>
-              {item.ocupado ? '🚗' : selectedCajon === item.numero ? '✅' : '🅿️'}
-            </Text>
-          </TouchableOpacity>
-        )}
-      />
 
-      {/* Botón de reservar */}
+      <ScrollView contentContainerStyle={styles.gridScroll}>
+        {Array.from({ length: 6 }).map((_, rowIndex) => {
+          const fila = (
+            <View key={`fila-${rowIndex}`} style={styles.row}>
+              {Array.from({ length: CAJONES_POR_FILA }).map((_, colIndex) => {
+                const index = rowIndex * CAJONES_POR_FILA + colIndex;
+                const cajon = cajones[index];
+                if (!cajon) return null;
+
+                if (cajon.ocultar) {
+                  return (
+                    <View
+                      key={cajon.id}
+                      style={{ width: 30, height: 36, margin: 4 }}
+                    />
+                  );
+                }
+
+                const isSelected = selectedCajon === cajon.id;
+                const libre = !cajon.ocupado;
+
+                return (
+                  <TouchableOpacity
+                    key={cajon.id}
+                    disabled={!libre}
+                    style={[
+                      styles.cajon,
+                      cajon.ocupado && styles.cajonOcupado,
+                      isSelected && styles.cajonSeleccionado,
+                    ]}
+                    onPress={() => setSelectedCajon(cajon.id)}
+                  >
+                    <Text style={styles.cajonNum}>{cajon.id}</Text>
+                    <Text style={styles.cajonIcon}>
+                      {cajon.ocupado ? "🚗" : isSelected ? "✅" : "🅿️"}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          );
+
+          const agregarPasillo = rowIndex === 1 || rowIndex === 3;
+
+          return (
+            <React.Fragment key={`grupo-${rowIndex}`}>
+              {fila}
+              {agregarPasillo && <View style={styles.pasillo} />}
+            </React.Fragment>
+          );
+        })}
+      </ScrollView>
+
       <TouchableOpacity
         style={[styles.botonReservar, !selectedCajon && { opacity: 0.7 }]}
         onPress={handleReservar}
@@ -98,7 +138,7 @@ export default function MapaScreen({ route, navigation }) {
         <Text style={styles.botonReservarTexto}>
           {selectedCajon
             ? `Reservar cajón #${selectedCajon}`
-            : 'Selecciona un cajón para reservar'}
+            : "Selecciona un cajón para reservar"}
         </Text>
       </TouchableOpacity>
     </View>
@@ -106,86 +146,93 @@ export default function MapaScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c1631' },
+  container: { flex: 1, backgroundColor: "#0c1631" },
   imagenWrap: {
-    marginBottom: 15,
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 25,
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
   },
   imagenPlaza: {
     width: width - 40,
     height: 170,
     borderRadius: 18,
-    marginTop: 18,
+    marginTop: 78,
     zIndex: 1,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(12,22,49,0.55)',
+    backgroundColor: "rgba(12,22,49,0.55)",
     borderRadius: 18,
     zIndex: 2,
   },
   tituloPlaza: {
-    position: 'absolute',
-    top: 32,
-    left: 30,
+    position: "absolute",
+    top: 92,
+    left: 40,
     fontSize: 26,
-    color: '#fff',
-    fontWeight: 'bold',
+    color: "#fff",
+    fontWeight: "bold",
     zIndex: 3,
-    textShadowColor: '#333',
+    textShadowColor: "#333",
     textShadowRadius: 10,
   },
   horario: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 18,
-    left: 30,
+    left: 40,
     fontSize: 15,
-    color: '#f6e58d',
+    color: "#f6e58d",
     zIndex: 3,
-    fontWeight: '700',
-    textShadowColor: '#0c1631',
+    fontWeight: "700",
+    textShadowColor: "#0c1631",
     textShadowRadius: 6,
   },
   subtitulo: {
-    color: 'white',
+    color: "white",
     fontSize: 17,
     marginBottom: 12,
-    textAlign: 'center',
-    fontWeight: '600',
+    textAlign: "center",
+    fontWeight: "600",
   },
-  grid: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  gridScroll: {
+    alignItems: "center",
+    paddingBottom: 40,
+  },
+  row: {
+    flexDirection: "row",
+    justifyContent: "center",
     marginBottom: 8,
   },
+  pasillo: {
+    height: 20,
+  },
   cajon: {
-    width: 46,
-    height: 46,
-    backgroundColor: '#2ecc71',
-    margin: 6,
+    width: 24,
+    height: 45,
+    backgroundColor: "#2ecc71",
+    margin: 4,
     borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     elevation: 4,
     borderWidth: 2,
-    borderColor: '#232f45',
+    borderColor: "#232f45",
   },
   cajonOcupado: {
-    backgroundColor: '#636e72',
-    borderColor: '#4a4a4a',
+    backgroundColor: "#636e72",
+    borderColor: "#4a4a4a",
     opacity: 0.7,
   },
   cajonSeleccionado: {
-    backgroundColor: '#4a90e2',
-    borderColor: '#f9ca24',
+    backgroundColor: "#4a90e2",
+    borderColor: "#f9ca24",
     elevation: 10,
   },
   cajonNum: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 15,
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 13,
   },
   cajonIcon: {
     fontSize: 18,
@@ -193,18 +240,18 @@ const styles = StyleSheet.create({
   },
   botonReservar: {
     marginTop: 12,
-    marginBottom: 22,
-    alignSelf: 'center',
-    backgroundColor: '#3366ff',
+    marginBottom: 42,
+    alignSelf: "center",
+    backgroundColor: "#3366ff",
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 18,
     elevation: 5,
   },
   botonReservarTexto: {
-    color: 'white',
-    fontWeight: 'bold',
+    color: "white",
+    fontWeight: "bold",
     fontSize: 17,
-    textAlign: 'center',
+    textAlign: "center",
   },
 });
