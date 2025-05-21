@@ -11,8 +11,10 @@ import {
   Image,
   FlatList,
   Alert,
+  Pressable,
+  TouchableOpacity,
 } from "react-native";
-import { NavigationProp, RouteProp } from "@react-navigation/native";
+import { NavigationProp, RouteProp, useFocusEffect } from "@react-navigation/native";
 import io from "socket.io-client";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -100,7 +102,7 @@ export default function ParkingAppScreen({
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const [reservaExitosa, setReservaExitosa] = useState(false);
 
-  // Nuevo: estados para modal de correo
+  // Modal de correo
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [emailError, setEmailError] = useState('');
@@ -158,7 +160,7 @@ export default function ParkingAppScreen({
     setShowProfileModal(false);
   };
 
-  // -------- FUNCION PARA VERIFICAR CORREO RECIBO -------
+  // -------- FUNCION PARA VERIFICAR CORREO RECIBO Y TRAER DATOS -------
   const verificarCorreoRecibo = async () => {
     setEmailError('');
     if (!emailInput) {
@@ -166,13 +168,20 @@ export default function ParkingAppScreen({
       return;
     }
     try {
+      // 1. Verifica si existe un recibo para ese correo
       const response = await fetch(`http://192.168.1.71:5000/api/verificar-recibo?email=${encodeURIComponent(emailInput)}`);
       const data = await response.json();
       if (data.exists) {
+        // 2. Pide los datos completos del recibo
+        const dataRecibo = await fetch(`http://192.168.1.71:5000/api/datos-recibo?email=${encodeURIComponent(emailInput)}`);
+        const recibo = await dataRecibo.json();
+
         setShowEmailModal(false);
         setEmailInput('');
-        Alert.alert('Acceso concedido', '¡Correo correcto! Puedes ver tus mensajes.');
-        navigation.navigate('MessageScreen', { email: emailInput });
+        setEmailError('');
+
+        // 3. Navega a la pantalla de mensajes con los datos del recibo
+        navigation.navigate('MessageScreen', { recibo });
       } else {
         setEmailError('Correo incorrecto');
       }
@@ -182,34 +191,33 @@ export default function ParkingAppScreen({
   };
 
   // Modal para pedir correo
-const modalCorreo = (
-  <Modal visible={showEmailModal} transparent animationType="fade">
-    <View style={styles.modalOverlay}>
-      <View style={styles.emailModalContent}>
-        <Text style={styles.emailModalTitle}>Ingresa tu correo</Text>
-        <TextInput
-          style={styles.emailInput}
-          placeholder="ejemplo@correo.com"
-          placeholderTextColor="#8e9aaf"
-          value={emailInput}
-          onChangeText={setEmailInput}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        {emailError ? (
-          <Text style={styles.emailError}>{emailError}</Text>
-        ) : null}
-        <Pressable style={styles.emailModalButton} onPress={verificarCorreoRecibo}>
-          <Text style={styles.emailModalButtonText}>Verificar</Text>
-        </Pressable>
-        <Pressable style={styles.emailModalCancel} onPress={() => { setShowEmailModal(false); setEmailError(''); }}>
-          <Text style={styles.emailModalCancelText}>Cancelar</Text>
-        </Pressable>
+  const modalCorreo = (
+    <Modal visible={showEmailModal} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.emailModalContent}>
+          <Text style={styles.emailModalTitle}>Ingresa tu correo</Text>
+          <TextInput
+            style={styles.emailInput}
+            placeholder="ejemplo@correo.com"
+            placeholderTextColor="#8e9aaf"
+            value={emailInput}
+            onChangeText={setEmailInput}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          {emailError ? (
+            <Text style={styles.emailError}>{emailError}</Text>
+          ) : null}
+          <Pressable style={styles.emailModalButton} onPress={verificarCorreoRecibo}>
+            <Text style={styles.emailModalButtonText}>Verificar</Text>
+          </Pressable>
+          <Pressable style={styles.emailModalCancel} onPress={() => { setShowEmailModal(false); setEmailError(''); }}>
+            <Text style={styles.emailModalCancelText}>Cancelar</Text>
+          </Pressable>
+        </View>
       </View>
-    </View>
-  </Modal>
-);
-
+    </Modal>
+  );
 
   const renderPlaza = ({ item }) => (
     <View style={styles.plazaCard}>
@@ -232,7 +240,7 @@ const modalCorreo = (
         onPress={() => handleVerDetalle(item)}
       >
         <Text style={styles.estrenoText}>Ver Disponibilidad</Text>
-      </TouchableOpacity>
+      </Pressable>
       <Text style={styles.plazaTitle}>{item.nombre}</Text>
       <Text style={styles.ciudadText}>{item.ciudad}</Text>
       <TouchableOpacity onPress={handleReservar}>
@@ -251,14 +259,8 @@ const modalCorreo = (
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#0c1631" barStyle="light-content" />
-      {/* Barra superior */}
+      {/* Barra superior (sin botones de esquina) */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => alert("Notificaciones")}
-        >
-          <Ionicons name="notifications-outline" size={24} color="white" />
-        </Pressable>
         <View style={styles.tabsContainer}>
           <TabButton
             title="Estacionamientos"
@@ -274,12 +276,6 @@ const modalCorreo = (
             }}
           />
         </View>
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => setShowProfileModal(true)}
-        >
-          <Ionicons name="person-circle-outline" size={28} color="white" />
-        </Pressable>
       </View>
       {/* Barra de búsqueda */}
       <View style={styles.searchBar}>
@@ -300,12 +296,11 @@ const modalCorreo = (
               onPress={() => setSelectedPlaza(null)}
             >
               <Ionicons name="close" size={20} color="white" />
-            </Pressable>
+            </TouchableOpacity>
           )}
-        </Pressable>
+        </TouchableOpacity>
       </View>
       {/* Contenido principal */}
-
       <FlatList
         data={selectedPlaza ? [selectedPlaza] : filteredPlazas}
         renderItem={renderPlaza}
@@ -313,8 +308,7 @@ const modalCorreo = (
         contentContainerStyle={styles.plazasList}
         numColumns={2}
       />
-
-      {/* Barra inferior de navegación */}
+      {/* Barra inferior de navegación (SIN botón "Más") */}
       <View style={styles.navbar}>
         <TouchableOpacity
           style={styles.navItem}
@@ -334,12 +328,11 @@ const modalCorreo = (
             Plazas
           </Text>
         </TouchableOpacity>
-        {/* Mensajes: Candado y color rojo si no ha reservado */}
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => {
             if (reservaExitosa) {
-              navigation.navigate("MessageScreen");
+              setShowEmailModal(true);
             } else {
               Alert.alert(
                 "Función bloqueada",
@@ -359,8 +352,8 @@ const modalCorreo = (
           >
             Mensajes
           </Text>
-        </Pressable>
-        <Pressable
+        </TouchableOpacity>
+        <TouchableOpacity
           style={styles.navItem}
           onPress={() => navigation.navigate("ClubScreen")}
         >
@@ -369,15 +362,12 @@ const modalCorreo = (
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => alert("Mis reservas")}
+        onPress={() => navigation.navigate('ReservasScreen')} // <---- AQUI EL CAMBIO
         >
           <Ionicons name="time-outline" size={24} color="#8e9aaf" />
           <Text style={styles.navText}>Mis reservas</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => alert("Más")}>
-          <Ionicons name="ellipsis-horizontal" size={24} color="#8e9aaf" />
-          <Text style={styles.navText}>Más</Text>
-        </Pressable>
+        {/* ELIMINADO: Botón "Más" */}
       </View>
       {/* Modales */}
       {modalCorreo}
@@ -418,11 +408,11 @@ const modalCorreo = (
               onPress={() => setShowSearchModal(false)}
             >
               <Text style={styles.closeModalText}>Cerrar</Text>
-            </Pressable>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
-      {/* Modal de perfil */}
+      {/* Modal de perfil (si lo necesitas, lo puedes dejar, no se muestra ya en header) */}
       <Modal visible={showProfileModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -469,7 +459,7 @@ const modalCorreo = (
               onPress={() => setShowProfileModal(false)}
             >
               <Text style={styles.closeModalText}>Cancelar</Text>
-            </Pressable>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -481,12 +471,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0c1631" },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center", // CENTRADO TABS
     alignItems: "center",
     paddingTop: 50,
     paddingHorizontal: 15,
     backgroundColor: "#0c1631",
   },
+  // ...los estilos siguen igual...
   iconButton: { padding: 8 },
   tabsContainer: { flexDirection: "row", flex: 1, justifyContent: "center" },
   tabButton: { paddingVertical: 12, paddingHorizontal: 10 },
@@ -609,6 +600,64 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  emailModalContent: {
+    backgroundColor: "#162244",
+    width: "90%",
+    borderRadius: 10,
+    padding: 20,
+    alignItems: "center",
+    maxHeight: '80%',
+  },
+  emailModalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "white",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  emailInput: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#2d3d64",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: "white",
+    backgroundColor: "#233364",
+    marginBottom: 15,
+  },
+  emailError: {
+    color: "#d63031",
+    fontSize: 14,
+    marginBottom: 10,
+    textAlign: "center",
+    alignSelf: 'flex-start'
+  },
+  emailModalButton: {
+    width: "100%",
+    backgroundColor: "#3366ff",
+    paddingVertical: 12,
+    borderRadius: 5,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  emailModalButtonText: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  emailModalCancel: {
+    width: "100%",
+    backgroundColor: "#2d3d64",
+    paddingVertical: 10,
+    borderRadius: 5,
+    alignItems: "center",
+  },
+  emailModalCancelText: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
   modalContent: {
     backgroundColor: "white",
     width: "90%",
@@ -667,3 +716,4 @@ const styles = StyleSheet.create({
   },
   saveButtonText: { color: "white", fontWeight: "bold", fontSize: 16 },
 });
+

@@ -1,3 +1,6 @@
+// =====================
+// IMPORTS ÚNICOS
+// =====================
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -10,26 +13,111 @@ const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 
+// =====================
+// INSTANCIAS PRINCIPALES
+// =====================
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// =====================
+// MIDDLEWARES ÚNICOS
+// =====================
 app.use(express.json());
 app.use(cors({ origin: '*' }));
 
-// =======================
-// NUEVA RUTA: obtener datos del recibo por email
-// =======================
+// =====================
+// SOCKETS Y ESTADO EN TIEMPO REAL
+// =====================
+let ultimoEstado = [];
+let usuariosConectados = {}; // { usuario: { socketId, nombre, cajon, placas } }
+
+io.on("connection", (socket) => {
+  console.log("📲 Cliente conectado:", socket.id);
+  socket.emit("message", JSON.stringify(ultimoEstado));
+
+  // Login de usuario para chat
+  socket.on('loginUsuario', (data) => {
+    const { usuario, placas, cajon } = data;
+    if (!usuariosConectados[usuario]) {
+      usuariosConectados[usuario] = {
+        socketId: socket.id,
+        nombre: usuario,
+        placas: placas || '',
+        cajon: cajon || '',
+      };
+    } else {
+      usuariosConectados[usuario].socketId = socket.id;
+      if (placas !== undefined) usuariosConectados[usuario].placas = placas;
+      if (cajon !== undefined) usuariosConectados[usuario].cajon = cajon;
+    }
+    socket.usuario = usuario;
+    io.emit('usuariosConectados', usuariosConectados);
+  });
+
+  // Usuario envía mensaje al guardia
+  socket.on('enviarMensajeUsuario', (data) => {
+    const { usuario, mensaje } = data;
+    io.emit('recibirMensaje', { nombre: usuario, mensaje });
+  });
+
+  // Guardia envía mensaje a usuario específico
+  socket.on('enviarMensajeGuardia', (data) => {
+    const { usuario, mensaje } = data;
+    const usuarioData = usuariosConectados[usuario];
+    if (usuarioData && io.sockets.sockets.get(usuarioData.socketId)) {
+      io.to(usuarioData.socketId).emit('recibirMensaje', {
+        nombre: 'Guardia',
+        mensaje,
+        destinatario: usuario,
+      });
+    }
+  });
+
+  // Usuario indica que está escribiendo
+  socket.on('usuarioEscribiendo', (data) => {
+    const { usuario, escribiendo } = data;
+    io.emit('usuarioEscribiendo', { usuario, escribiendo });
+  });
+
+  // Guardia indica que está escribiendo
+  socket.on('guardiaEscribiendo', (escribiendo) => {
+    io.emit('guardiaEscribiendo', escribiendo);
+  });
+
+  // Evento para notificar reservas a todos los guardias/app
+  socket.on('nuevaReserva', (data) => {
+    io.emit('reservaParaGuardia', data);
+  });
+
+  socket.on('disconnect', () => {
+    if (socket.usuario && usuariosConectados[socket.usuario]) {
+      delete usuariosConectados[socket.usuario];
+    }
+    io.emit('usuariosConectados', usuariosConectados);
+  });
+});
+
+// =====================
+// ENDPOINTS Y LÓGICA DE API
+// =====================
+
+// Actualizar estado en tiempo real (mapa, etc)
+app.post("/actualizar", (req, res) => {
+  ultimoEstado = req.body;
+  io.emit("message", JSON.stringify(ultimoEstado));
+  res.sendStatus(200);
+});
+
+// Obtener datos del recibo por email
 app.get('/api/datos-recibo', async (req, res) => {
   const email = req.query.email;
   if (!email) return res.status(400).json({ error: 'Falta email' });
 
   try {
-    // Busca el último pago por ese correo (ordenar por fecha descendente)
     const pago = await PagoInfo.findOne({ correo: email }).sort({ fechaPago: -1 });
     if (!pago) return res.status(404).json({ error: 'No se encontró recibo para ese correo' });
 
-    // Devuelve todos los campos necesarios (si algún campo no existe, regresa vacío)
     res.json({
       name: pago.nombre,
       email: pago.correo,
@@ -45,11 +133,7 @@ app.get('/api/datos-recibo', async (req, res) => {
   }
 });
 
-// =======================
-// TODAS TUS RUTAS ORIGINALES DESDE AQUÍ (NADA SE ELIMINA)
-// =======================
-
-// Ruta para enviar recibo por correo
+// Enviar recibo por correo (con PDF)
 app.post('/api/enviar-recibo', async (req, res) => {
   const { name, email, plates, model, plaza, cajon } = req.body;
   const fecha = new Date().toLocaleString('es-MX', { 
@@ -72,10 +156,10 @@ app.post('/api/enviar-recibo', async (req, res) => {
     size: 'A4',
     margins: { top: 50, bottom: 50, left: 50, right: 50 }
   });
-  
+
   const stream = fs.createWriteStream(filePath);
   doc.pipe(stream);
-  
+
   const colorPrimario = '#0026A9';
   const colorSecundario = '#f2f2f2';
   const logoPath = path.join(__dirname, 'assets', 'logo.png');
@@ -117,7 +201,6 @@ app.post('/api/enviar-recibo', async (req, res) => {
       doc.font('Helvetica-Bold').fontSize(24).fillColor(colorPrimario).text('SMARTPARK', 50, 50);
     }
   } catch (err) {
-    console.log('Error al cargar el logo:', err);
     doc.font('Helvetica-Bold').fontSize(24).fillColor(colorPrimario).text('SMARTPARK', 50, 50);
   }
   doc.font('Helvetica-Bold').fontSize(18).fillColor(colorPrimario).text('RECIBO DE RENTA DE CAJÓN', 280, 60, { align: 'right' });
@@ -179,9 +262,6 @@ app.post('/api/enviar-recibo', async (req, res) => {
   doc.end();
 
   stream.on('finish', async () => {
-    console.log(`✅ PDF generado en: ${filePath}`);
-    console.log(`📤 Preparando envío a: ${email}`);
-
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -200,26 +280,28 @@ app.post('/api/enviar-recibo', async (req, res) => {
 
     try {
       await transporter.verify();
-      console.log('✅ Conexión SMTP verificada');
       await transporter.sendMail(mailOptions);
-      console.log('📨 Correo enviado a:', email);
       res.status(200).json({ message: 'Recibo enviado por correo correctamente' });
     } catch (error) {
-      console.error('❌ Error al enviar correo:', error);
       res.status(500).json({ message: 'Error al enviar el correo', error: error.message });
     }
   });
 
   stream.on('error', (err) => {
-    console.error('❌ Error al generar PDF:', err);
     res.status(500).json({ message: 'Error al generar el PDF', error: err.message });
   });
 });
 
-app.use(express.json());
-app.use(cors({ origin: '*' }));
+app.get('/api/recibos', async (req, res) => {
+  try {
+    const recibos = await PagoInfo.find().sort({ fechaPago: -1 }); // Ordena por fecha, el más nuevo primero
+    res.json(recibos);
+  } catch (err) {
+    res.status(500).json({ error: 'No se pudieron obtener los recibos.' });
+  }
+});
 
-// Ruta para verificar si existe recibo con el correo (AJUSTA el path según tu server)
+// Verificar si existe recibo con el correo
 app.get('/api/verificar-recibo', (req, res) => {
   const email = req.query.email;
   if (!email) return res.json({ exists: false });
@@ -233,7 +315,9 @@ app.get('/api/verificar-recibo', (req, res) => {
   });
 });
 
-// Conectar a MongoDB - VERSIÓN CORREGIDA
+// =====================
+// MONGODB: CONEXIÓN Y MODELOS
+// =====================
 const uri = 'mongodb+srv://user:CspjnjmJ7QeC59HM@smartpark.crquenp.mongodb.net/?retryWrites=true&w=majority&appName=SMARTPARK';
 
 mongoose.connect(uri)
@@ -254,11 +338,10 @@ mongoose.connection.on('disconnected', () => {
 });
 process.on('SIGINT', async () => {
   await mongoose.connection.close();
-  console.log('Conexión a MongoDB cerrada debido a terminación de la aplicación');
   process.exit(0);
 });
 
-// --- MongoDB: Rutas para Mensajes de Contacto ---
+// Modelo de Mensajes de Contacto
 const mensajeSchema = new mongoose.Schema({
   nombre: { type: String, required: true },
   correo: { type: String, required: true },
@@ -266,7 +349,6 @@ const mensajeSchema = new mongoose.Schema({
   mensaje: { type: String, required: true },
   fecha: { type: Date, default: Date.now },
 });
-
 const Mensaje = mongoose.model('Mensaje', mensajeSchema);
 
 const contactValidationSchema = Joi.object({
@@ -291,16 +373,13 @@ app.post('/api/contact', async (req, res) => {
     });
 
     await nuevoMensaje.save();
-    console.log('Datos insertados correctamente en la base de datos.');
     res.status(200).json({ message: 'Mensaje enviado exitosamente' });
   } catch (error) {
-    console.error('Error al guardar el mensaje:', error);
     res.status(500).json({ message: 'Error al enviar el mensaje', error: error.message });
   }
 });
 
-// --- MongoDB: Rutas para Pagos con Stripe ---
-// Modifica tu esquema PagoInfo para aceptar plaza/cajon/total pero SIN quitar los campos previos
+// Modelo de Pagos Stripe
 const pagoSchema = new mongoose.Schema({
   nombre: { type: String, required: true },
   correo: { type: String, required: true },
@@ -339,7 +418,7 @@ app.post('/api/pagos', async (req, res) => {
         enabled: true,
         allow_redirects: 'never',
       },
-      receipt_email: email, // Enviar el recibo a este correo electrónico
+      receipt_email: email,
       metadata: { name, plates, model },
     });
 
@@ -354,13 +433,11 @@ app.post('/api/pagos', async (req, res) => {
         total: '$696.00'
       });
       await nuevoPago.save();
-      console.log('Pago guardado en la base de datos.');
       res.status(200).json({ message: 'Pago realizado exitosamente' });
     } else {
       res.status(400).json({ message: 'Error en el pago: Estado del pago no es exitoso' });
     }
   } catch (error) {
-    console.error('Error al procesar el pago:', error);
     if (error.type === 'StripeCardError') {
       res.status(400).json({ message: 'Error con la tarjeta de crédito: ' + error.message });
     } else if (error.type === 'StripeInvalidRequestError') {
@@ -377,91 +454,10 @@ app.post('/api/pagos', async (req, res) => {
   }
 });
 
-// --- Socket.IO: Lógica para Chat en Tiempo Real con Usuario Específico ---
-// --- Servidor Usuarios ---
-let usuariosConectados = {}; // { usuario: { socketId, nombre, cajon, placas } }
-
-io.on('connection', (socket) => {
-  console.log('Usuario conectado:', socket.id);
-
-  // Login de usuario para chat
-  socket.on('loginUsuario', (data) => {
-    console.log('Datos login recibidos:', data);
-    const { usuario, placas, cajon } = data;
-
-    if (!usuariosConectados[usuario]) {
-      usuariosConectados[usuario] = {
-        socketId: socket.id,
-        nombre: usuario,
-        placas: placas || '',
-        cajon: cajon || '',
-      };
-    } else {
-      usuariosConectados[usuario].socketId = socket.id;
-      if (placas !== undefined) usuariosConectados[usuario].placas = placas;
-      if (cajon !== undefined) usuariosConectados[usuario].cajon = cajon;
-    }
-
-    socket.usuario = usuario;
-
-    console.log(`${usuario} conectado en cajón ${usuariosConectados[usuario].cajon}`);
-    io.emit('usuariosConectados', usuariosConectados);
-  });
-
-  // Usuario envía mensaje al guardia
-  socket.on('enviarMensajeUsuario', (data) => {
-    const { usuario, mensaje } = data;
-    // Emitir al guardia: puede ser broadcast o socket específico
-    io.emit('recibirMensaje', { nombre: usuario, mensaje });
-    console.log(`Mensaje recibido del usuario ${usuario}: ${mensaje}`);
-  });
-
-  // Guardia envía mensaje a usuario específico
-  socket.on('enviarMensajeGuardia', (data) => {
-    const { usuario, mensaje } = data;
-    const usuarioData = usuariosConectados[usuario];
-    if (usuarioData && io.sockets.sockets.get(usuarioData.socketId)) {
-      io.to(usuarioData.socketId).emit('recibirMensaje', {
-        nombre: 'Guardia',
-        mensaje,
-        destinatario: usuario,
-      });
-      console.log(`Mensaje enviado a ${usuario} (cajón ${usuarioData.cajon}): ${mensaje}`);
-    } else {
-      console.error(`Error: Usuario ${usuario} no está conectado`);
-    }
-  });
-
-  // Usuario indica que está escribiendo
-  socket.on('usuarioEscribiendo', (data) => {
-    const { usuario, escribiendo } = data;
-    // Notificar al guardia o a todos los interesados
-    io.emit('usuarioEscribiendo', { usuario, escribiendo });
-  });
-
-  // Guardia indica que está escribiendo
-  socket.on('guardiaEscribiendo', (escribiendo) => {
-    // Notificar a todos los usuarios conectados que el guardia está escribiendo
-    io.emit('guardiaEscribiendo', escribiendo);
-  });
-
-  // Evento para notificar reservas a todos los guardias/app
-  socket.on('nuevaReserva', (data) => {
-    console.log('Nueva reserva recibida:', data);
-    io.emit('reservaParaGuardia', data);
-  });
-
-  socket.on('disconnect', () => {
-    if (socket.usuario && usuariosConectados[socket.usuario]) {
-      console.log(`Usuario desconectado: ${socket.usuario}`);
-      delete usuariosConectados[socket.usuario];
-    }
-    io.emit('usuariosConectados', usuariosConectados);
-  });
-});
-
+// =====================
+// INICIAR SERVIDOR (SOLO UNA VEZ)
+// =====================
 const PORT = 5000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor ejecutándose en el puerto ${PORT}`);
 });
-

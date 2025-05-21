@@ -1,81 +1,82 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
   StatusBar,
-  Alert,
   Dimensions,
   ScrollView,
+  Alert,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import io from "socket.io-client";
 
 const { width } = Dimensions.get("window");
 const TOTAL_CAJONES = 72;
 const CAJONES_POR_FILA = 12;
-const socket = io("http://192.168.1.87:5050"); // Cambia la IP si es necesario
 
-export default function MapaScreen({ route, navigation }) {
-  const { plaza } = route.params;
-
+export default function MapaScreen({ navigation }) {
   const [cajones, setCajones] = useState(
     Array.from({ length: TOTAL_CAJONES }, (_, i) => ({
       id: `${i + 1}`,
       ocupado: false,
-      ocultar: i + 1 === 72, // Oculta el cajón 72 visualmente
+      ocultar: i + 1 === 72,
     }))
   );
 
   const [selectedCajon, setSelectedCajon] = useState(null);
+  const [socket, setSocket] = useState(null);
 
-  useEffect(() => {
-    socket.on("connect", () => console.log("🟢 Conectado a WebSocket"));
+  useFocusEffect(
+    useCallback(() => {
+      // Crear conexión socket cada vez que la pantalla tiene foco
+      const newSocket = io("http://192.168.1.71:5000");
 
-    socket.on("message", (data) => {
-      const updates = JSON.parse(data); // [{ id: "1", status: "occupied" }]
-      setCajones((prev) =>
-        prev.map((cajon) => {
-          const update = updates.find((u) => u.id === cajon.id);
-          return update
-            ? { ...cajon, ocupado: update.status === "occupied" }
-            : cajon;
-        })
-      );
-    });
+      newSocket.on("connect", () => console.log("🟢 Conectado a WebSocket"));
 
-    return () => socket.disconnect();
-  }, []);
+      newSocket.on("message", (data) => {
+        const updates = JSON.parse(data);
+        setCajones((prev) =>
+          prev.map((cajon) => {
+            const update = updates.find((u) => u.id === cajon.id);
+            return update
+              ? { ...cajon, ocupado: update.status === "occupied" }
+              : cajon;
+          })
+        );
+      });
+
+      setSocket(newSocket);
+
+      // Cleanup: desconectar socket cuando pierde foco la pantalla
+      return () => {
+        if (newSocket) {
+          newSocket.disconnect();
+          setSocket(null);
+          console.log("🔴 Desconectado de WebSocket");
+        }
+      };
+    }, [])
+  );
 
   const handleReservar = () => {
     if (!selectedCajon) {
       Alert.alert("Selecciona un cajón libre para reservar");
       return;
     }
+    // Pasar el cajón seleccionado y dejando availableSpots con un valor predeterminado
     navigation.navigate("InfoCarScreen", {
-      availableSpots: plaza.disponibles,
-      plazaSeleccionada: plaza.nombre,
-      cajonSeleccionado: selectedCajon,
+      cajonSeleccionado: parseInt(selectedCajon),
+      availableSpots: 72 // Usar el número total de cajones como valor predeterminado
     });
   };
 
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#0c1631" barStyle="light-content" />
-
-      <View style={styles.imagenWrap}>
-        <Image
-          source={plaza.imagen}
-          style={styles.imagenPlaza}
-          resizeMode="cover"
-        />
-        <View style={styles.overlay} />
-        <Text style={styles.tituloPlaza}>{plaza.nombre}</Text>
-        <Text style={styles.horario}>{plaza.horario}</Text>
-      </View>
-
-      <Text style={styles.subtitulo}>Selecciona tu cajón</Text>
+      <Text style={styles.tituloPlaza}>Mapa de Estacionamiento</Text>
+      <Text style={styles.horario}>Seleccione un cajón disponible</Text>
 
       <ScrollView contentContainerStyle={styles.gridScroll}>
         {Array.from({ length: 6 }).map((_, rowIndex) => {
@@ -147,53 +148,24 @@ export default function MapaScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0c1631" },
-  imagenWrap: {
-    marginBottom: 25,
-    position: "relative",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  imagenPlaza: {
-    width: width - 40,
-    height: 170,
-    borderRadius: 18,
-    marginTop: 78,
-    zIndex: 1,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(12,22,49,0.55)",
-    borderRadius: 18,
-    zIndex: 2,
-  },
   tituloPlaza: {
-    position: "absolute",
-    top: 92,
-    left: 40,
+    marginTop: 20,
+    marginBottom: 8,
     fontSize: 26,
     color: "#fff",
     fontWeight: "bold",
-    zIndex: 3,
+    textAlign: "center",
     textShadowColor: "#333",
     textShadowRadius: 10,
   },
   horario: {
-    position: "absolute",
-    bottom: 18,
-    left: 40,
+    marginBottom: 20,
     fontSize: 15,
     color: "#f6e58d",
-    zIndex: 3,
+    textAlign: "center",
     fontWeight: "700",
     textShadowColor: "#0c1631",
     textShadowRadius: 6,
-  },
-  subtitulo: {
-    color: "white",
-    fontSize: 17,
-    marginBottom: 12,
-    textAlign: "center",
-    fontWeight: "600",
   },
   gridScroll: {
     alignItems: "center",

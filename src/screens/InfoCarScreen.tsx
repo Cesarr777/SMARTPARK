@@ -26,7 +26,7 @@ type RootStackParamList = {
   PremiumScreen: { availableSpots: number };
   InfoCarScreen: { availableSpots: number; plazaSeleccionada?: string; cajonSeleccionado?: number };
   ClubScreen: undefined;
-  MessageScreen: { email: string; mensaje?: string };
+  MessageScreen: { recibo: any };
 };
 
 type InfoCarScreenNavigationProp = StackNavigationProp<RootStackParamList, 'InfoCarScreen'>;
@@ -42,7 +42,6 @@ export default function InfoCarScreen({
   const params = route.params || {};
   const { createPaymentMethod } = useStripe();
 
-  // Datos de usuario y reserva
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [plates, setPlates] = useState('');
@@ -57,15 +56,11 @@ export default function InfoCarScreen({
   const [cajon, setCajon] = useState(params.cajonSeleccionado ? String(params.cajonSeleccionado) : '');
   const [reservaExitosa, setReservaExitosa] = useState(false);
 
-  // Para evitar doble login socket
   const socketLogged = useRef(false);
   const [userLogged, setUserLogged] = useState(false);
 
-  // Modal mensaje entrante
   const [modalMensajeVisible, setModalMensajeVisible] = useState(false);
   const [mensajeModalTexto, setMensajeModalTexto] = useState('');
-
-  // Modal correo
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [emailError, setEmailError] = useState('');
@@ -78,9 +73,13 @@ export default function InfoCarScreen({
   }, []);
 
   useEffect(() => {
-    if (params.plazaSeleccionada) setSelectedPlaza(params.plazaSeleccionada);
-    if (params.cajonSeleccionado) setCajon(String(params.cajonSeleccionado));
-  }, [params.plazaSeleccionada, params.cajonSeleccionado]);
+  console.log("Params recibidos:", route.params);
+  if (route.params?.plazaSeleccionada) setSelectedPlaza(route.params.plazaSeleccionada);
+  if (route.params?.cajonSeleccionado) {
+    console.log("Cajón seleccionado recibido:", route.params.cajonSeleccionado);
+    setCajon(String(route.params.cajonSeleccionado));
+  }
+}, [route.params]);
 
   useEffect(() => {
     if (reservaExitosa && email && name && !socketLogged.current) {
@@ -95,7 +94,6 @@ export default function InfoCarScreen({
     }
   }, [reservaExitosa, email, name, plates, cajon]);
 
-  // Escuchar mensajes entrantes para mostrar modal
   useEffect(() => {
     function handleNuevoMensaje(data: any) {
       if (userLogged && data.email === email) {
@@ -110,7 +108,6 @@ export default function InfoCarScreen({
     };
   }, [email, userLogged]);
 
-  // Descuento
   const applyDiscount = () => {
     if (!discountUsed) {
       setTotal(prev => prev * 0.95);
@@ -118,7 +115,70 @@ export default function InfoCarScreen({
     }
   };
 
-  // Pago
+  const verificarCorreoRecibo = async () => {
+    setEmailError('');
+    if (!emailInput) {
+      setEmailError('Ingresa tu correo');
+      return;
+    }
+    setLoadingCorreo(true);
+    try {
+      const response = await fetch(`http://192.168.1.71:5000/api/datos-recibo?email=${encodeURIComponent(emailInput)}`);
+      if (!response.ok) {
+        setLoadingCorreo(false);
+        setEmailError('Correo incorrecto o sin recibo');
+        return;
+      }
+      const recibo = await response.json();
+      setLoadingCorreo(false);
+      if (recibo && recibo.email) {
+        setShowEmailModal(false);
+        setEmailInput('');
+        setEmailError('');
+        navigation.navigate('MessageScreen', { recibo });
+      } else {
+        setEmailError('Correo incorrecto o sin recibo');
+      }
+    } catch (err) {
+      setLoadingCorreo(false);
+      setEmailError('Error al verificar. Intenta de nuevo.');
+    }
+  };
+
+  const modalCorreo = (
+    <Modal visible={showEmailModal} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.emailModalContent}>
+          <Text style={styles.emailModalTitle}>Ingresa tu correo</Text>
+          <TextInput
+            style={styles.emailInput}
+            placeholder="ejemplo@correo.com"
+            placeholderTextColor="#8e9aaf"
+            value={emailInput}
+            onChangeText={setEmailInput}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          {emailError ? (
+            <Text style={styles.emailError}>{emailError}</Text>
+          ) : null}
+          <Pressable style={styles.emailModalButton} onPress={verificarCorreoRecibo} disabled={loadingCorreo}>
+            <Text style={styles.emailModalButtonText}>{loadingCorreo ? "Verificando..." : "Verificar"}</Text>
+          </Pressable>
+          <Pressable
+            style={styles.emailModalCancel}
+            onPress={() => {
+              setShowEmailModal(false);
+              setEmailError('');
+            }}
+          >
+            <Text style={styles.emailModalCancelText}>Cancelar</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const handlePayment = async () => {
     if (!selectedPlaza) return alert('Selecciona una plaza antes de pagar.');
     if (!cajon) return alert('Ingresa el número de cajón reservado.');
@@ -191,77 +251,36 @@ export default function InfoCarScreen({
     }
   };
 
-  // Navegar a mensajes desde modal
-  const accederMensajes = (correo: string) => {
-    setModalMensajeVisible(false);
-    setShowEmailModal(false);
-    setEmailInput('');
-    navigation.navigate('MessageScreen', { email: correo, mensaje: mensajeModalTexto });
-  };
-
-  // Modal correo
-  const modalCorreo = (
-    <Modal visible={showEmailModal} transparent animationType="fade">
+  const modalPlaza = (
+    <Modal visible={showPlazaModal} transparent animationType="slide">
       <View style={styles.modalOverlay}>
-        <View style={styles.emailModalContent}>
-          <Text style={styles.emailModalTitle}>Ingresa tu correo</Text>
-          <TextInput
-            style={styles.emailInput}
-            placeholder="ejemplo@correo.com"
-            placeholderTextColor="#8e9aaf"
-            value={emailInput}
-            onChangeText={setEmailInput}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-          {emailError ? (
-            <Text style={styles.emailError}>{emailError}</Text>
-          ) : null}
-          <Pressable style={styles.emailModalButton} onPress={verificarCorreoRecibo} disabled={loadingCorreo}>
-            <Text style={styles.emailModalButtonText}>{loadingCorreo ? "Verificando..." : "Verificar"}</Text>
-          </Pressable>
-          <Pressable
-            style={styles.emailModalCancel}
-            onPress={() => {
-              setShowEmailModal(false);
-              setEmailError('');
-            }}
-          >
-            <Text style={styles.emailModalCancelText}>Cancelar</Text>
-          </Pressable>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Selecciona una plaza</Text>
+          {plazasDisponibles.map(plaza => (
+            <TouchableOpacity
+              key={plaza}
+              style={styles.plazaBtn}
+              onPress={() => {
+                setSelectedPlaza(plaza);
+                setShowPlazaModal(false);
+              }}
+            >
+              <Text style={styles.plazaText}>{plaza}</Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity onPress={() => setShowPlazaModal(false)} style={styles.closeModalButton}>
+            <Text style={styles.closeModalText}>Cerrar</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
 
-  // Verificar correo recibo
-  const verificarCorreoRecibo = async () => {
-    setEmailError('');
-    if (!emailInput) {
-      setEmailError('Ingresa tu correo');
-      return;
-    }
-    setLoadingCorreo(true);
-    try {
-      const response = await fetch(`http://192.168.1.71:5000/api/verificar-recibo?email=${encodeURIComponent(emailInput)}`);
-      const data = await response.json();
-      setLoadingCorreo(false);
-      if (data.exists) {
-        accederMensajes(emailInput);
-      } else {
-        setEmailError('Correo incorrecto');
-      }
-    } catch (err) {
-      setLoadingCorreo(false);
-      setEmailError('Error al verificar. Intenta de nuevo.');
-    }
-  };
-
   return (
     <StripeProvider publishableKey="pk_test_51RPASTPRHCxOJyDTRdVT6mFokPTOdClpYVOOaZxGxHpeK6uu7K2mUL8gzLOSMgkc7zoPuu8fs5hTJRBJPkhYSeeQ00TtfqeBp6">
       <View style={styles.container}>
         <StatusBar backgroundColor="#0c1631" barStyle="light-content" />
-        {/* Header */}
+        {/* Header SOLO CON TABS */}
         <View style={styles.header}>
           <View style={styles.tabsContainer}>
             <TouchableOpacity
@@ -284,9 +303,6 @@ export default function InfoCarScreen({
               </Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.iconButton} onPress={() => alert('Perfil')}>
-            <Ionicons name="person-circle-outline" size={28} color="white" />
-          </TouchableOpacity>
         </View>
 
         {/* Search Bar */}
@@ -390,33 +406,33 @@ export default function InfoCarScreen({
           </TouchableOpacity>
         </ScrollView>
 
-        {/* Navbar */}
-        <View style={styles.navbar}>
-          <TouchableOpacity style={styles.navItem} onPress={() => navigation.goBack()}>
-            <Ionicons
-              name="car"
-              size={24}
-              color={activeTab === 'estacionamientos' ? '#4a90e2' : '#8e9aaf'}
-            />
-            <Text style={styles.navText}>Plazas</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => setShowEmailModal(true)}>
-            <Ionicons name="mail-outline" size={24} color="#8e9aaf" />
-            <Text style={styles.navText}>Mensajes</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ClubScreen')}>
-            <Ionicons name="card-outline" size={24} color="#4a90e2" />
-            <Text style={[styles.navText, styles.activeNavText]}>Club</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => alert('Mis reservas')}>
-            <Ionicons name="time-outline" size={24} color="#8e9aaf" />
-            <Text style={styles.navText}>Mis reservas</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => alert('Más')}>
-            <Ionicons name="ellipsis-horizontal" size={24} color="#8e9aaf" />
-            <Text style={styles.navText}>Más</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Navbar SIN el botón "Más" */}
+            <View style={styles.navbar}>
+      <TouchableOpacity style={styles.navItem} onPress={() => navigation.goBack()}>
+        <Ionicons
+          name="car"
+          size={24}
+          color={activeTab === 'estacionamientos' ? '#4a90e2' : '#8e9aaf'}
+        />
+        <Text style={styles.navText}>Plazas</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.navItem} onPress={() => setShowEmailModal(true)}>
+        <Ionicons name="mail-outline" size={24} color="#8e9aaf" />
+        <Text style={styles.navText}>Mensajes</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ClubScreen')}>
+        <Ionicons name="card-outline" size={24} color="#4a90e2" />
+        <Text style={[styles.navText, styles.activeNavText]}>Club</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.navItem}
+        onPress={() => navigation.navigate('ReservasScreen')} // <---- AQUI EL CAMBIO
+      >
+        <Ionicons name="time-outline" size={24} color="#8e9aaf" />
+        <Text style={styles.navText}>Mis reservas</Text>
+      </TouchableOpacity>
+    </View>
+
 
         {/* Modal mensaje entrante */}
         <Modal
@@ -433,7 +449,10 @@ export default function InfoCarScreen({
               </ScrollView>
               <Pressable
                 style={styles.emailModalButton}
-                onPress={() => accederMensajes(email)}
+                onPress={() => {
+                  setModalMensajeVisible(false);
+                  setShowEmailModal(true);
+                }}
               >
                 <Text style={styles.emailModalButtonText}>Ir a mensajes</Text>
               </Pressable>
@@ -447,32 +466,8 @@ export default function InfoCarScreen({
           </View>
         </Modal>
 
-        {/* Modal correo */}
         {modalCorreo}
-
-        {/* Modal plazas */}
-        <Modal visible={showPlazaModal} transparent animationType="slide">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Selecciona una plaza</Text>
-              {plazasDisponibles.map(plaza => (
-                <TouchableOpacity
-                  key={plaza}
-                  style={styles.plazaBtn}
-                  onPress={() => {
-                    setSelectedPlaza(plaza);
-                    setShowPlazaModal(false);
-                  }}
-                >
-                  <Text style={styles.plazaText}>{plaza}</Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity onPress={() => setShowPlazaModal(false)} style={styles.closeModalButton}>
-                <Text style={styles.closeModalText}>Cerrar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+        {modalPlaza}
       </View>
     </StripeProvider>
   );
@@ -482,7 +477,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c1631' },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center', // SOLO TABS
     alignItems: 'center',
     paddingTop: Platform.OS === 'android' ? 20 : 50,
     paddingHorizontal: 15,

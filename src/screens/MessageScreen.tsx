@@ -17,32 +17,49 @@ const socket = io('http://192.168.1.71:5000');
 const LOGO_URI = require('../../assets/logo.png');
 
 export default function MessageScreen({ route }) {
-  const { email } = route.params || {};
-  const [recibo, setRecibo] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Puede llegar por recibo (flujo nuevo) o solo por email (fallback)
+  const reciboParam = route.params?.recibo;
+  const emailParam = route.params?.email;
+
+  const [recibo, setRecibo] = useState(reciboParam || null);
+  const [loading, setLoading] = useState(!reciboParam);
   const [mensajes, setMensajes] = useState([]);
   const [mensajeTexto, setMensajeTexto] = useState('');
   const [guardiaEscribiendo, setGuardiaEscribiendo] = useState(false);
   const scrollRef = useRef();
 
+  // Si no trae recibo, lo carga por email (solo fallback)
   useEffect(() => {
-    if (email) {
-      fetch(`http://192.168.1.71:5000/api/datos-recibo?email=${encodeURIComponent(email)}`)
+    if (!recibo && emailParam) {
+      fetch(`http://192.168.1.71:5000/api/datos-recibo?email=${encodeURIComponent(emailParam)}`)
         .then(res => res.json())
         .then(data => {
           setRecibo(data);
           setLoading(false);
 
-          const resumen = {
-            usuario: data.name,
-            placas: data.plates,
-            cajon: data.cajon,
-          };
-          socket.emit('loginUsuario', resumen);
+          if (data && data.name) {
+            const resumen = {
+              usuario: data.name,
+              placas: data.plates,
+              cajon: data.cajon,
+            };
+            socket.emit('loginUsuario', resumen);
+          }
         })
         .catch(() => setLoading(false));
+    } else if (recibo && recibo.name) {
+      const resumen = {
+        usuario: recibo.name,
+        placas: recibo.plates,
+        cajon: recibo.cajon,
+      };
+      socket.emit('loginUsuario', resumen);
+      setLoading(false);
     }
+    // eslint-disable-next-line
+  }, [recibo, emailParam]);
 
+  useEffect(() => {
     socket.on('recibirMensaje', (data) => {
       setMensajes(prev => [...prev, { de: 'Guardia', texto: data.mensaje }]);
       setGuardiaEscribiendo(false);
@@ -56,7 +73,7 @@ export default function MessageScreen({ route }) {
       socket.off('recibirMensaje');
       socket.off('guardiaEscribiendo');
     };
-  }, [email]);
+  }, []);
 
   useEffect(() => {
     // Hace scroll al fondo al recibir/enviar mensaje
@@ -66,15 +83,18 @@ export default function MessageScreen({ route }) {
   }, [mensajes, guardiaEscribiendo]);
 
   const enviarMensaje = () => {
-    if (!mensajeTexto.trim()) return;
+    if (!mensajeTexto.trim() || !recibo?.name) return;
     socket.emit('enviarMensajeUsuario', { usuario: recibo.name, mensaje: mensajeTexto });
     setMensajes(prev => [...prev, { de: 'Tú', texto: mensajeTexto }]);
     setMensajeTexto('');
+    socket.emit('usuarioEscribiendo', { usuario: recibo.name, escribiendo: false });
   };
 
   const onChangeTexto = (text) => {
     setMensajeTexto(text);
-    socket.emit('usuarioEscribiendo', { usuario: recibo?.name, escribiendo: text.length > 0 });
+    if (recibo?.name) {
+      socket.emit('usuarioEscribiendo', { usuario: recibo.name, escribiendo: text.length > 0 });
+    }
   };
 
   if (loading)
@@ -104,7 +124,6 @@ export default function MessageScreen({ route }) {
           <Image source={LOGO_URI} style={styles.logo} />
           <Text style={styles.companyName}>SmartPark</Text>
         </View>
-        {/* SCROLLVIEW SOLO PARA EL CONTENIDO */}
         <ScrollView
           contentContainerStyle={styles.scroll}
           ref={scrollRef}
@@ -122,9 +141,7 @@ export default function MessageScreen({ route }) {
                 <Text style={styles.info}>{recibo.cajon}</Text>
               </View>
             </View>
-
             <View style={styles.divider} />
-
             <View style={styles.row}>
               <View style={styles.colLeft}>
                 <Text style={styles.label}>Nombre</Text>
@@ -139,9 +156,7 @@ export default function MessageScreen({ route }) {
                 <Text style={styles.info}>{recibo.model}</Text>
               </View>
             </View>
-
             <View style={styles.divider} />
-
             <View style={styles.rowTotal}>
               <Text style={styles.label}>Total:</Text>
               <Text style={styles.total}>{recibo.total}</Text>
@@ -200,7 +215,7 @@ const styles = StyleSheet.create({
   bg: { flex: 1, backgroundColor: '#0c1631' },
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0c1631' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0c1631' },
-  scroll: { padding: 24, paddingTop: 0, paddingBottom: 32, paddingBottom: 120 }, // más espacio abajo para el input
+  scroll: { padding: 24, paddingTop: 0, paddingBottom: 120 }, // espacio para input
   logoRow: {
     flexDirection: 'row',
     alignItems: 'center',

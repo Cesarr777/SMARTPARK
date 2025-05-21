@@ -1,13 +1,11 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import LoginScreen from '../screens/LoginScreen';
-import HomeScreen from '../screens/HomeScreen';
 import MapaScreen from '../screens/MapaScreen';
-import PremiumScreen from '../screens/PremiumScreen';
-import ContactoScreen from '../screens/ContactoScreen';
 import MessageScreen from '../screens/MessageScreen';
 import InfoCarScreen from '../screens/InfoCarScreen';
 import ClubScreen from '../screens/ClubScreen'; // Pantalla de ventajas del Club
+import ReservasScreen from '../screens/ReservasScreen'; // <- ¡Agrega tu pantalla aquí!
 import { enableScreens } from 'react-native-screens';
 
 enableScreens();
@@ -24,23 +22,8 @@ export default function MainNavigator() {
           options={{ headerShown: false }} 
         />
         <Stack.Screen 
-          name="Home" 
-          component={HomeScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
           name="MapaScreen" 
           component={MapaScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="ContactoScreen" 
-          component={ContactoScreen} 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="PremiumScreen" 
-          component={PremiumScreen} 
           options={{ headerShown: false }} 
         />
         <Stack.Screen 
@@ -56,6 +39,11 @@ export default function MainNavigator() {
         <Stack.Screen
           name="ClubScreen"
           component={ClubScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="ReservasScreen" // <--- Aquí la nueva pantalla
+          component={ReservasScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>
